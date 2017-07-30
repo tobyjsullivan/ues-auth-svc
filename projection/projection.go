@@ -34,6 +34,15 @@ type Projection struct {
     EmailIdentityToAccountIndex map[uuid.UUID]uuid.UUID
 }
 
+func NewProjection() *Projection {
+    return &Projection{
+        Accounts: make(map[uuid.UUID]*Account),
+        EmailIdentities: make(map[uuid.UUID]*EmailIdentity),
+        EmailToEmailIdentityIndex: make(map[string]uuid.UUID),
+        EmailIdentityToAccountIndex: make(map[uuid.UUID]uuid.UUID),
+    }
+}
+
 func (p *Projection) FindAccount(email string, password string) (*Account, error) {
     normalizedEmail := strings.ToLower(email)
 

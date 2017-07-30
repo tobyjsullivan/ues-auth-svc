@@ -53,9 +53,14 @@ func init() {
         panic("Log validation failed. "+err.Error())
     }
 
-    state = &projection.Projection{}
+    state = projection.NewProjection()
+
+    logger.Println("Subscribing projection to log.", logId.String())
+
     start := reader.EventID{}
-    client.Subscribe(logId, start, state.Apply)
+    client.Subscribe(logId, start, state.Apply, true)
+
+    logger.Println("Hydration complete.", logId.String())
 }
 
 func main() {

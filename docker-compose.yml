@@ -29,12 +29,20 @@ services:
     depends_on:
     - "log-db"
     - "event-reader"
+    - "redis"
     environment:
     - EVENT_READER_API=http://event-reader:3000/
     - PG_HOSTNAME=log-db
     - PG_USERNAME=postgres
     - PG_PASSWORD=pass1234
     - PG_DATABASE=postgres
+    - REDIS_HOSTNAME=redis
+    - REDIS_PORT=6379
+    - REDIS_PASSWORD=
+  redis:
+    image: redis:3.0
+    volumes:
+    - ./data/redis:/data
   event-log:
     image: tobyjsullivan/event-log:latest
     ports:
