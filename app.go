@@ -13,9 +13,17 @@ import (
     "log"
     "strings"
     "net/url"
+    _ "github.com/lib/pq"
+    "database/sql"
+    "crypto/rand"
+    "github.com/satori/go.uuid"
+    "encoding/json"
+    "encoding/hex"
 )
 
 const (
+    AUTH_TOKEN_BYTES = 64
+
     // TODO Read from env var or implement support for multiple clients
     CLIENT_ID = "6C77F4DC179E1575C87F7443EDFCEE6A8C885031CDF1048424DCB4834DF307C5"
     CLIENT_CALLBACK_URL = "http://localhost:3000/callback"
@@ -23,6 +31,7 @@ const (
 
 var (
     logger *log.Logger
+    db         *sql.DB
     logId reader.LogID
     client *reader.Client
     state *projection.Projection
@@ -31,9 +40,24 @@ var (
 func init() {
     logger = log.New(os.Stdout, "[service] ", 0)
 
+    pgHostname := os.Getenv("PG_HOSTNAME")
+    pgUsername := os.Getenv("PG_USERNAME")
+    pgPassword := os.Getenv("PG_PASSWORD")
+    pgDatabase := os.Getenv("PG_DATABASE")
+
+    dbConnOpts := fmt.Sprintf("host='%s' user='%s' dbname='%s' password='%s' sslmode=disable",
+        pgHostname, pgUsername, pgDatabase, pgPassword)
+
+    logger.Println("Connecting to DB...")
+    var err error
+    db, err = sql.Open("postgres", dbConnOpts)
+    if err != nil {
+        logger.Println("Error initializing connection to Postgres DB.", err.Error())
+        panic(err.Error())
+    }
+
     readerSvc := os.Getenv("LOG_READER_API")
 
-    var err error
     client, err = reader.New(&reader.ClientConfig{
         ServiceAddress: readerSvc,
         Logger: logger,
@@ -153,6 +177,52 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // TODO Return an auth token
-    w.WriteHeader(http.StatusOK)
+    // Generate an auth token
+    token := make([]byte, AUTH_TOKEN_BYTES)
+    _, err = rand.Read(token)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    err = commitToken(acct.ID, token)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    resp := responseFmt{
+        Data: struct{
+            Token string `json:"token"`
+        }{
+            Token: hex.EncodeToString(token),
+        },
+    }
+
+    encoder := json.NewEncoder(w)
+    if err = encoder.Encode(&resp); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+}
+
+type responseFmt struct {
+    Data interface{} `json:"data"`
+}
+
+func commitToken(accountId uuid.UUID, token []byte) error {
+    res, err := db.Exec(`INSERT INTO Tokens(ACCOUNT_ID, TOKEN) VALUES ($1, $2)`, accountId.Bytes(), token)
+    if err != nil {
+        logger.Println("Error inserting new log record.", err.Error())
+        return err
+    }
+
+    numRows, err := res.RowsAffected()
+    if err != nil {
+        logger.Println("Error reading RowsAffected.", err.Error())
+        return err
+    }
+    logger.Println("Rows affected:", numRows)
+
+    return nil
 }

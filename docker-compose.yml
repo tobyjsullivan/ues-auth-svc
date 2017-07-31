@@ -9,10 +9,21 @@ services:
     ports:
     - "3000:3000"
     depends_on:
+    - "auth-db"
     - "event-log-reader"
     environment:
     - SERVICE_LOG_ID=fbd8aab2-06ad-4738-84d8-1156adae860e
     - LOG_READER_API=http://event-log-reader:3000/
+    - PG_HOSTNAME=auth-db
+    - PG_USERNAME=postgres
+    - PG_PASSWORD=authPass1234
+    - PG_DATABASE=postgres
+  auth-db:
+    image: tobyjsullivan/auth-db:latest
+    environment:
+    - POSTGRES_PASSWORD=authPass1234
+    volumes:
+    - ./data/auth-db:/var/lib/postgresql/data
   ues-command-api:
     image: tobyjsullivan/ues-command-api:latest
     ports:
