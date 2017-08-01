@@ -19,10 +19,12 @@ import (
     "github.com/satori/go.uuid"
     "encoding/json"
     "encoding/hex"
+    "time"
 )
 
 const (
     AUTH_TOKEN_BYTES = 64
+    AUTH_TOKEN_EXPIRY_SECONDS = 86400 // 24 hours
 
     // TODO Read from env var or implement support for multiple clients
     CLIENT_ID = "6C77F4DC179E1575C87F7443EDFCEE6A8C885031CDF1048424DCB4834DF307C5"
@@ -185,17 +187,23 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    err = commitToken(acct.ID, token)
+    expiry := time.Now().Add(AUTH_TOKEN_EXPIRY_SECONDS * time.Second)
+
+    err = commitToken(acct.ID, token, expiry)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
 
+    timeToExpire := expiry.Sub(time.Now())
+
     resp := responseFmt{
         Data: struct{
             Token string `json:"token"`
+            Expires int `json:"expires"`
         }{
             Token: hex.EncodeToString(token),
+            Expires: int(timeToExpire.Seconds()),
         },
     }
 
@@ -210,8 +218,8 @@ type responseFmt struct {
     Data interface{} `json:"data"`
 }
 
-func commitToken(accountId uuid.UUID, token []byte) error {
-    res, err := db.Exec(`INSERT INTO Tokens(ACCOUNT_ID, TOKEN) VALUES ($1, $2)`, accountId.Bytes(), token)
+func commitToken(accountId uuid.UUID, token []byte, expiry time.Time) error {
+    res, err := db.Exec(`INSERT INTO Tokens(ACCOUNT_ID, TOKEN, EXPIRES) VALUES ($1, $2, $3)`, accountId.Bytes(), token, expiry)
     if err != nil {
         logger.Println("Error inserting new log record.", err.Error())
         return err
