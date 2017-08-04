@@ -30,9 +30,11 @@ services:
     - "3001:3000"
     depends_on:
     - "event-log"
+    - "event-log-reader"
     environment:
     - SERVICE_LOG_ID=fbd8aab2-06ad-4738-84d8-1156adae860e
     - LOG_WRITER_API=http://event-log:3000/
+    - LOG_READER_API=http://event-log-reader:3000/
   event-log-reader:
     image: tobyjsullivan/event-log-reader:latest
     ports:
