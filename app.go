@@ -28,6 +28,7 @@ const (
 
     // TODO Read from env var or implement support for multiple clients
     CLIENT_ID = "6C77F4DC179E1575C87F7443EDFCEE6A8C885031CDF1048424DCB4834DF307C5"
+    CLIENT_SECRET = "47SPBd3fMkWuip1THEyR+YXoXmoeCrONizPcegToZOrVbIhfwpNIGiaSwiJnixk2vqwSgjR38Dltx5CuuIYa4A=="
     CLIENT_CALLBACK_URL = "http://localhost:3000/callback"
 )
 
@@ -107,6 +108,7 @@ func buildRoutes() http.Handler {
     r := mux.NewRouter()
     r.HandleFunc("/", statusHandler).Methods("GET")
     r.HandleFunc("/authorize", authHandler).Methods("POST")
+    r.HandleFunc("/verify", verifyTokenHandler).Methods("POST")
 
     return r
 }
@@ -179,6 +181,12 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    clientId, err := parseClientId(paramClientId)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
     // Generate an auth token
     token := make([]byte, AUTH_TOKEN_BYTES)
     _, err = rand.Read(token)
@@ -189,7 +197,14 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
     expiry := time.Now().Add(AUTH_TOKEN_EXPIRY_SECONDS * time.Second)
 
-    err = commitToken(acct.ID, token, expiry)
+    t := &tokenIssue{
+        clientId: clientId,
+        accountId: acct.ID,
+        token: token,
+        expiry: expiry,
+    }
+
+    err = commitToken(t)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
@@ -214,12 +229,82 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
     }
 }
 
+func verifyTokenHandler(w http.ResponseWriter, r *http.Request) {
+    if err := r.ParseForm(); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    paramToken := r.Form.Get("token")
+    paramClientId := r.Form.Get("client-id")
+    paramClientSecret := r.Form.Get("client-secret")
+
+    if strings.ToUpper(paramClientId) != CLIENT_ID {
+        http.Error(w, "Invalid client-id. "+paramClientId, http.StatusUnauthorized)
+        return
+    }
+
+    if paramClientSecret != CLIENT_SECRET {
+        http.Error(w, "Invalid client-secret.", http.StatusUnauthorized)
+        return
+    }
+
+    token, err := hex.DecodeString(paramToken)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    clientId, err := parseClientId(paramClientId)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    issue, err := lookupToken(clientId, token)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    timeToExpire := issue.expiry.Sub(time.Now())
+
+    resp := responseFmt{
+        Data: struct {
+            AccountID string `json:"accountId"`
+            Expires int `json:"expires"`
+        }{
+            AccountID: issue.accountId.String(),
+            Expires: int(timeToExpire.Seconds()),
+        },
+    }
+
+    encoder := json.NewEncoder(w)
+    if err = encoder.Encode(&resp); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+}
+
 type responseFmt struct {
     Data interface{} `json:"data"`
 }
 
-func commitToken(accountId uuid.UUID, token []byte, expiry time.Time) error {
-    res, err := db.Exec(`INSERT INTO Tokens(ACCOUNT_ID, TOKEN, EXPIRES) VALUES ($1, $2, $3)`, accountId.Bytes(), token, expiry)
+func parseClientId(s string) ([32]byte, error) {
+    bytesClientId, err := hex.DecodeString(s)
+    if err != nil {
+        return [32]byte{}, err
+    }
+
+    var clientId [32]byte
+    copy(clientId[:], bytesClientId)
+
+    return clientId, nil
+}
+
+func commitToken(t *tokenIssue) error {
+    // TODO Add Client-ID to record
+    res, err := db.Exec(`INSERT INTO Tokens(ACCOUNT_ID, TOKEN, EXPIRES) VALUES ($1, $2, $3)`, t.accountId.Bytes(), t.token, t.expiry)
     if err != nil {
         logger.Println("Error inserting new log record.", err.Error())
         return err
@@ -233,4 +318,32 @@ func commitToken(accountId uuid.UUID, token []byte, expiry time.Time) error {
     logger.Println("Rows affected:", numRows)
 
     return nil
+}
+
+func lookupToken(clientId [32]byte, token []byte) (*tokenIssue, error) {
+    // TODO Add clientID filter to where clause
+    var accountIdBytes []byte
+    var expires time.Time
+    err := db.QueryRow(`SELECT ACCOUNT_ID, EXPIRES FROM Tokens WHERE token=$1 AND expires>NOW()`, token).Scan(&accountIdBytes, &expires)
+    if err != nil {
+        return nil, err
+    }
+
+    accountId := uuid.UUID{}
+    copy(accountId[:], accountIdBytes)
+
+    return &tokenIssue{
+        clientId: clientId,
+        accountId: accountId,
+        token: token,
+        expiry: expires,
+    }, nil
+}
+
+
+type tokenIssue struct {
+    clientId [32]byte
+    accountId uuid.UUID
+    token []byte
+    expiry time.Time
 }
