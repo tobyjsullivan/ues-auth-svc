@@ -25,33 +25,33 @@ func init() {
 }
 
 type Projection struct {
-    mx sync.Mutex
+    mx                          sync.Mutex
 
-    Accounts map[uuid.UUID]*Account
-    EmailIdentities map[uuid.UUID]*EmailIdentity
+    accounts                    map[uuid.UUID]*Account
+    emailIdentities             map[uuid.UUID]*EmailIdentity
 
-    EmailToEmailIdentityIndex map[string]uuid.UUID
-    EmailIdentityToAccountIndex map[uuid.UUID]uuid.UUID
+    emailToEmailIdentityIndex   map[string]uuid.UUID
+    emailIdentityToAccountIndex map[uuid.UUID]uuid.UUID
 }
 
 func NewProjection() *Projection {
     return &Projection{
-        Accounts: make(map[uuid.UUID]*Account),
-        EmailIdentities: make(map[uuid.UUID]*EmailIdentity),
-        EmailToEmailIdentityIndex: make(map[string]uuid.UUID),
-        EmailIdentityToAccountIndex: make(map[uuid.UUID]uuid.UUID),
+        accounts: make(map[uuid.UUID]*Account),
+        emailIdentities: make(map[uuid.UUID]*EmailIdentity),
+        emailToEmailIdentityIndex: make(map[string]uuid.UUID),
+        emailIdentityToAccountIndex: make(map[uuid.UUID]uuid.UUID),
     }
 }
 
 func (p *Projection) FindAccount(email string, password string) (*Account, error) {
     normalizedEmail := strings.ToLower(email)
 
-    identityId, ok := p.EmailToEmailIdentityIndex[normalizedEmail]
+    identityId, ok := p.emailToEmailIdentityIndex[normalizedEmail]
     if !ok {
         return nil, nil
     }
 
-    identity := p.EmailIdentities[identityId]
+    identity := p.emailIdentities[identityId]
     match, err := identity.PasswordMatches(password)
     if err != nil {
         return nil, err
@@ -60,8 +60,8 @@ func (p *Projection) FindAccount(email string, password string) (*Account, error
         return nil, nil
     }
 
-    accountId := p.EmailIdentityToAccountIndex[identity.ID]
-    account := p.Accounts[accountId]
+    accountId := p.emailIdentityToAccountIndex[identity.ID]
+    account := p.accounts[accountId]
     return account, nil
 }
 
@@ -92,12 +92,12 @@ func (p *Projection) handleAccountOpened(data []byte) {
         return
     }
 
-    if _, exists := p.Accounts[accountId]; exists {
+    if _, exists := p.accounts[accountId]; exists {
         logger.Println("Encountered a duplicate event in handleAccountOpened:", accountId.String())
         return
     }
 
-    p.Accounts[accountId] = &Account{
+    p.accounts[accountId] = &Account{
         ID: accountId,
     }
 }
@@ -137,12 +137,12 @@ func (p *Projection) handleEmailIdentityRegistered(data []byte) {
         return
     }
 
-    if _, exists := p.EmailIdentities[identityId]; exists {
+    if _, exists := p.emailIdentities[identityId]; exists {
         logger.Println("Identity with id already exists.", identityId.String())
         return
     }
 
-    if _, exists := p.Accounts[accountId]; !exists {
+    if _, exists := p.accounts[accountId]; !exists {
         logger.Println("No account with ID exists.", accountId.String())
         return
     }
@@ -154,13 +154,13 @@ func (p *Projection) handleEmailIdentityRegistered(data []byte) {
         PasswordHash: passwordHash,
         PasswordSalt: passwordSalt,
     }
-    p.EmailIdentities[identityId] = identity
+    p.emailIdentities[identityId] = identity
 
-    account := p.Accounts[accountId]
+    account := p.accounts[accountId]
     account.Identities = append(account.Identities, identityId)
 
-    p.EmailToEmailIdentityIndex[strings.ToLower(identity.Email)] = identity.ID
-    p.EmailIdentityToAccountIndex[identity.ID] = accountId
+    p.emailToEmailIdentityIndex[strings.ToLower(identity.Email)] = identity.ID
+    p.emailIdentityToAccountIndex[identity.ID] = accountId
 }
 
 
