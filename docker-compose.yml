@@ -22,13 +22,13 @@ services:
     - PG_PASSWORD=authPass1234
     - PG_DATABASE=postgres
   auth-db:
-    image: tobyjsullivan/auth-db:1.0.0
+    image: tobyjsullivan/auth-db:1.0
     environment:
     - POSTGRES_PASSWORD=authPass1234
     volumes:
     - ./data/auth-db:/var/lib/postgresql/data
   ues-command-api:
-    image: tobyjsullivan/ues-command-api:1.0.0
+    image: tobyjsullivan/ues-command-api:1.0
     ports:
     - "6001:3000"
     depends_on:
@@ -39,7 +39,7 @@ services:
     - LOG_WRITER_API=http://event-log:3000/
     - LOG_READER_API=http://event-log-reader:3000/
   event-log-reader:
-    image: tobyjsullivan/event-log-reader:1.0.0
+    image: tobyjsullivan/event-log-reader:1.0
     ports:
     - "6003:3000"
     depends_on:
@@ -60,7 +60,7 @@ services:
     volumes:
     - ./data/redis:/data
   event-log:
-    image: tobyjsullivan/event-log:1.0.0
+    image: tobyjsullivan/event-log:1.0
     ports:
     - "6002:3000"
     depends_on:
@@ -73,17 +73,17 @@ services:
     - PG_PASSWORD=pass1234
     - PG_DATABASE=postgres
   log-db:
-    image: tobyjsullivan/logs-db:1.0.0
+    image: tobyjsullivan/logs-db:1.0
     environment:
     - POSTGRES_PASSWORD=pass1234
     volumes:
     - ./data/log-db:/var/lib/postgresql/data
   event-reader:
-    image: tobyjsullivan/event-reader:3.0.0
+    image: tobyjsullivan/event-reader:3.0
     env_file:
     - ./env/event-reader.env
   event-store:
-    image: tobyjsullivan/event-store:3.0.0
+    image: tobyjsullivan/event-store:3.0
     env_file:
     - ./env/event-store.env
 
