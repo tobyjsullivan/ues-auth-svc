@@ -7,11 +7,14 @@ services:
     volumes:
     - .:/go/src/github.com/tobyjsullivan/ues-auth-svc
     ports:
-    - "3000:3000"
+    - "6000:3000"
     depends_on:
     - "auth-db"
     - "event-log-reader"
     environment:
+    - CLIENT_ID=6C77F4DC179E1575C87F7443EDFCEE6A8C885031CDF1048424DCB4834DF307C5
+    - CLIENT_SECRET=47SPBd3fMkWuip1THEyR+YXoXmoeCrONizPcegToZOrVbIhfwpNIGiaSwiJnixk2vqwSgjR38Dltx5CuuIYa4A==
+    - CLIENT_CALLBACK_URL=http://localhost:3000/callback
     - SERVICE_LOG_ID=fbd8aab2-06ad-4738-84d8-1156adae860e
     - LOG_READER_API=http://event-log-reader:3000/
     - PG_HOSTNAME=auth-db
@@ -27,7 +30,7 @@ services:
   ues-command-api:
     image: tobyjsullivan/ues-command-api:1.0.0
     ports:
-    - "3001:3000"
+    - "6001:3000"
     depends_on:
     - "event-log"
     - "event-log-reader"
@@ -38,7 +41,7 @@ services:
   event-log-reader:
     image: tobyjsullivan/event-log-reader:1.0.0
     ports:
-    - "3003:3000"
+    - "6003:3000"
     depends_on:
     - "log-db"
     - "event-reader"
@@ -59,7 +62,7 @@ services:
   event-log:
     image: tobyjsullivan/event-log:1.0.0
     ports:
-    - "3002:3000"
+    - "6002:3000"
     depends_on:
     - "log-db"
     - "event-store"

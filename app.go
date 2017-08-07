@@ -11,7 +11,6 @@ import (
     "github.com/tobyjsullivan/ues-auth-svc/projection"
     "github.com/tobyjsullivan/log-sdk/reader"
     "log"
-    "strings"
     "net/url"
     _ "github.com/lib/pq"
     "database/sql"
@@ -20,16 +19,14 @@ import (
     "encoding/json"
     "encoding/hex"
     "time"
+    "errors"
+    "encoding/base64"
+    "bytes"
 )
 
 const (
     AUTH_TOKEN_BYTES = 64
     AUTH_TOKEN_EXPIRY_SECONDS = 86400 // 24 hours
-
-    // TODO Read from env var or implement support for multiple clients
-    CLIENT_ID = "6C77F4DC179E1575C87F7443EDFCEE6A8C885031CDF1048424DCB4834DF307C5"
-    CLIENT_SECRET = "47SPBd3fMkWuip1THEyR+YXoXmoeCrONizPcegToZOrVbIhfwpNIGiaSwiJnixk2vqwSgjR38Dltx5CuuIYa4A=="
-    CLIENT_CALLBACK_URL = "http://localhost:3000/callback"
 )
 
 var (
@@ -113,7 +110,7 @@ func buildRoutes() http.Handler {
     return r
 }
 
-func statusHandler(w http.ResponseWriter, r *http.Request) {
+func statusHandler(w http.ResponseWriter, _ *http.Request) {
     fmt.Fprint(w, "The ues-auth-svc service is online!\n")
 }
 
@@ -148,25 +145,24 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    if strings.ToUpper(paramClientId) != CLIENT_ID {
-        http.Error(w, "Invalid ClientID. "+paramClientId, http.StatusUnauthorized)
-        return
-    }
-
-    expectedUrl, err := url.Parse(CLIENT_CALLBACK_URL)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
-
-    actualUrl, err := url.Parse(paramCallbackUrl)
+    clientId, err := parseClientId(paramClientId)
     if err != nil {
         http.Error(w, err.Error(), http.StatusBadRequest)
         return
     }
 
-    if actualUrl.String() != expectedUrl.String() {
-        http.Error(w, "Invalid Callback URL.", http.StatusUnauthorized)
+    callbackUrl, err := url.Parse(paramCallbackUrl)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    valid, err := validateClientCallbackUrl(clientId, callbackUrl)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    } else if !valid {
+        http.Error(w, "Invalid client-id or callback-url.", http.StatusUnauthorized)
         return
     }
 
@@ -178,12 +174,6 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
     if acct == nil {
         http.Error(w, "Account not found.", http.StatusUnauthorized)
-        return
-    }
-
-    clientId, err := parseClientId(paramClientId)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
         return
     }
 
@@ -239,23 +229,28 @@ func verifyTokenHandler(w http.ResponseWriter, r *http.Request) {
     paramClientId := r.Form.Get("client-id")
     paramClientSecret := r.Form.Get("client-secret")
 
-    if strings.ToUpper(paramClientId) != CLIENT_ID {
-        http.Error(w, "Invalid client-id. "+paramClientId, http.StatusUnauthorized)
-        return
-    }
-
-    if paramClientSecret != CLIENT_SECRET {
-        http.Error(w, "Invalid client-secret.", http.StatusUnauthorized)
-        return
-    }
-
-    token, err := hex.DecodeString(paramToken)
+    clientId, err := parseClientId(paramClientId)
     if err != nil {
         http.Error(w, err.Error(), http.StatusBadRequest)
         return
     }
 
-    clientId, err := parseClientId(paramClientId)
+    clientSecret, err := base64.StdEncoding.DecodeString(paramClientSecret)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    valid, err := validateClientSecret(clientId, clientSecret)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    } else if !valid {
+        http.Error(w, "Invalid client-id or client-secret.", http.StatusUnauthorized)
+        return
+    }
+
+    token, err := hex.DecodeString(paramToken)
     if err != nil {
         http.Error(w, err.Error(), http.StatusBadRequest)
         return
@@ -300,6 +295,38 @@ func parseClientId(s string) ([32]byte, error) {
     copy(clientId[:], bytesClientId)
 
     return clientId, nil
+}
+
+func validateClientCallbackUrl(clientId [32]byte, callbackUrl *url.URL) (bool, error) {
+    if callbackUrl == nil {
+        return false, errors.New("No callbackUrl value present")
+    }
+
+    expectedId, err := parseClientId(os.Getenv("CLIENT_ID"))
+    if err != nil {
+        return false, err
+    }
+
+    expectedUrl, err := url.Parse(os.Getenv("CLIENT_CALLBACK_URL"))
+    if err != nil {
+        return false, err
+    }
+
+    return clientId == expectedId && callbackUrl.String() == expectedUrl.String(), nil
+}
+
+func validateClientSecret(clientId [32]byte, clientSecret []byte) (bool, error) {
+    expectedId, err := parseClientId(os.Getenv("CLIENT_ID"))
+    if err != nil {
+        return false, err
+    }
+
+    expectedSecret, err := base64.StdEncoding.DecodeString(os.Getenv("CLIENT_SECRET"))
+    if err != nil {
+        return false, err
+    }
+
+    return clientId == expectedId && bytes.Equal(clientSecret, expectedSecret), nil
 }
 
 func commitToken(t *tokenIssue) error {
