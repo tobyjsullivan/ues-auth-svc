@@ -25,7 +25,7 @@
 		},
 		{
 			"ImportPath": "github.com/tobyjsullivan/log-sdk/reader",
-			"Rev": "038da7a1a744c9b3d9fc751edb7a0e94559f4f86"
+			"Rev": "267748f6be1c9861ef408ee75685ebf69412eb50"
 		},
 		{
 			"ImportPath": "github.com/tobyjsullivan/ues-command-api/passwords",

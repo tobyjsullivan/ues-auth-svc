@@ -71,11 +71,6 @@ func init() {
 		panic("Error parsing LogID. " + err.Error())
 	}
 
-	err = client.ValidateLog(logId)
-	if err != nil {
-		panic("Log validation failed. " + err.Error())
-	}
-
 	state = projection.NewProjection()
 
 	logger.Println("Subscribing projection to log.", logId.String())

@@ -9,7 +9,6 @@ import (
     "time"
     "log"
     "context"
-    "errors"
 )
 
 type Client struct {
@@ -39,23 +38,6 @@ func (c *Client) logLn(v ...interface{}) {
     if c.logger != nil {
         c.logger.Println(v...)
     }
-}
-
-func (c *Client) ValidateLog(logId LogID) error {
-    endpoint := c.serviceUrl.ResolveReference(&url.URL{
-        Path: fmt.Sprintf("/logs/%s", logId.String()),
-    })
-
-    resp, err := http.Get(endpoint.String())
-    if err != nil {
-        return err
-    }
-
-    if resp.StatusCode != http.StatusOK {
-        return errors.New("Unexpected response code looking up log: "+resp.Status)
-    }
-
-    return nil
 }
 
 func (c *Client) GetEvents(logId LogID, after EventID) ([]*Event, error) {
