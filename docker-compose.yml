@@ -15,6 +15,7 @@ services:
     - CLIENT_ID=6C77F4DC179E1575C87F7443EDFCEE6A8C885031CDF1048424DCB4834DF307C5
     - CLIENT_SECRET=47SPBd3fMkWuip1THEyR+YXoXmoeCrONizPcegToZOrVbIhfwpNIGiaSwiJnixk2vqwSgjR38Dltx5CuuIYa4A==
     - CLIENT_CALLBACK_URL=http://localhost:3000/callback
+    - FRONTEND_URL=http://localhost:3000
     - SERVICE_LOG_ID=fbd8aab2-06ad-4738-84d8-1156adae860e
     - LOG_READER_API=http://event-log-reader:3000/
     - PG_HOSTNAME=auth-db

@@ -21,6 +21,7 @@ import (
 	"github.com/tobyjsullivan/log-sdk/reader"
 	"github.com/tobyjsullivan/ues-auth-svc/projection"
 	"github.com/urfave/negroni"
+	"github.com/rs/cors"
 )
 
 const (
@@ -34,6 +35,7 @@ var (
 	logId  reader.LogID
 	client *reader.Client
 	state  *projection.Projection
+	corsAllowedOrigin string
 )
 
 func init() {
@@ -53,6 +55,16 @@ func init() {
 	if err != nil {
 		logger.Println("Error initializing connection to Postgres DB.", err.Error())
 		panic(err.Error())
+	}
+
+	corsAllowedOrigin = os.Getenv("FRONTEND_URL")
+	if corsAllowedOrigin != "" {
+		parsed, err := url.Parse(corsAllowedOrigin)
+		if err != nil {
+			panic("Failed to parse FRONTENT_URL. "+err.Error())
+		}
+
+		corsAllowedOrigin = parsed.String()
 	}
 
 	readerSvc := os.Getenv("LOG_READER_API")
@@ -84,8 +96,12 @@ func init() {
 func main() {
 	r := buildRoutes()
 
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{corsAllowedOrigin},
+	})
+
 	n := negroni.New()
-	n.UseHandler(r)
+	n.UseHandler(c.Handler(r))
 
 	port := os.Getenv("PORT")
 	if port == "" {
